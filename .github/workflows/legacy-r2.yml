@@ -1,0 +1,54 @@
+name: Legacy pandas 2.2.3 data IO diagnostic
+on:
+  push:
+    branches: [ci/legacy-data-io-r2-20261012]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native:
+    runs-on: windows-11-arm
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: wrapper
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: pandas-dev/pandas
+          ref: 0691c5cf90477d3503834d983f69350f250a6ff7
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: dask/fastparquet
+          ref: 95416ad4214a21805c8256e5308272bec60cc177
+          path: fastparquet-source
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - name: Reuse exact retained fastparquet wheel
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 38186905680 --repo johnnynunez/fastparquet -n fastparquet-cp312-native-evidence --dir retained
+      - name: Build unchanged pandas and test installed data IO
+        shell: pwsh
+        run: python wrapper/legacy_lane.py
+      - name: Narrow exact-byte publication scan
+        if: always()
+        shell: pwsh
+        run: python wrapper/safe_upload.py evidence upload-safe
+      - name: Retain permitted evidence even after failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pandas223-fastparquet-diagnostic
+          path: ${{ github.workspace }}/upload-safe
+          retention-days: 14
+          if-no-files-found: error
